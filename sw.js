@@ -1,10 +1,23 @@
-const CACHE = 'agenda-v5';
+const CACHE = 'agenda-v6';
 const ASSETS = ['./', './index.html', './manifest.webmanifest',
   './js/dados.js', './js/ui.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
+/* `cache: 'reload'` obriga a buscar da rede. Sem isso o navegador entrega o
+   arquivo do cache HTTP dele (o GitHub Pages manda max-age=600) e o service
+   worker grava uma versão velha no cache novo — e passa a servir isso para
+   sempre, porque a estratégia aqui é cache-first. */
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    await Promise.all(ASSETS.map(async url => {
+      try{
+        const res = await fetch(new Request(url, {cache:'reload'}));
+        if(res.ok) await c.put(url, res);
+      }catch(err){}
+    }));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', e => {
