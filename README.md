@@ -1,4 +1,4 @@
-# Agenda — Luís
+# Agenda
 
 App de agenda diária com checks, aderência semanal/mensal, controle de água e balanço financeiro.
 PWA estático: sem backend, sem banco, sem build. É só subir a pasta.

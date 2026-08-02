@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Agenda — Luís</title>
+<title>Agenda</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1E3AE0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -665,9 +665,9 @@ function icsDate(dow,hhmm,base){
 const BYDAY=["SU","MO","TU","WE","TH","FR","SA"];
 function buildICS(){
   const base=new Date(), tre=document.getElementById('cfgTreino').value||"05:30";
-  const L=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Agenda Luis//PT-BR","CALSCALE:GREGORIAN","METHOD:PUBLISH","X-WR-CALNAME:Plano — Luís"];
+  const L=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Agenda//PT-BR","CALSCALE:GREGORIAN","METHOD:PUBLISH","X-WR-CALNAME:Plano"];
   const ev=(summary,desc,start,rrule)=>{
-    L.push("BEGIN:VEVENT",`UID:${uid()}@agenda-luis`,`DTSTAMP:${icsDate(base.getDay(),"090000".slice(0,2)+":00",base)}Z`,
+    L.push("BEGIN:VEVENT",`UID:${uid()}@agenda`,`DTSTAMP:${icsDate(base.getDay(),"090000".slice(0,2)+":00",base)}Z`,
       `DTSTART:${start}`,`DURATION:PT20M`,`RRULE:${rrule}`,
       `SUMMARY:${summary.replace(/[,;]/g,' ')}`,`DESCRIPTION:${(desc||'').replace(/[,;]/g,' ')}`,
       "BEGIN:VALARM","TRIGGER:PT0M","ACTION:DISPLAY",`DESCRIPTION:${summary.replace(/[,;]/g,' ')}`,"END:VALARM","END:VEVENT");
@@ -699,7 +699,7 @@ function buildICS(){
 document.getElementById('icsGo').onclick=()=>{
   const blob=new Blob([buildICS()],{type:"text/calendar;charset=utf-8"});
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download="plano-luis.ics"; a.click();
+  a.href=URL.createObjectURL(blob); a.download="plano.ics"; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   toast("Arquivo gerado. Abra com o Google Agenda para importar.");
 };
