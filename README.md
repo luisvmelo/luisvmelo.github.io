@@ -1,93 +1,102 @@
 # Agenda
 
-App de agenda diária com checks, aderência semanal/mensal, controle de água e balanço financeiro.
-PWA estático: sem backend, sem banco, sem build. É só subir a pasta.
+Agenda de duas pessoas: metas diárias e semanais, calendário com eventos compartilhados,
+treino com carga e pace, estudo com timer e tags, dinheiro individual e conjunto, e um
+placar de competição entre as duas contas.
+
+PWA estático: sem framework, sem bundler, sem build step, sem dependência. É só subir a pasta.
 
 ## Arquivos
 
 ```
-index.html               o app inteiro
-manifest.webmanifest     identidade do PWA (nome, ícone, cor)
-sw.js                    service worker: cache offline
-icons/                   ícones 192, 512 e maskable
+index.html            marcação e estilo
+js/dados.js           modelo, armazenamento local e sincronia com o Supabase
+js/ui.js              telas, formulários e o placar
+sw.js                 service worker: cache offline
+manifest.webmanifest  identidade do PWA
+supabase.sql          estrutura do banco, para colar no SQL Editor
+icons/                ícones 192, 512 e maskable
 ```
 
-## Como subir
+## As abas
 
-Qualquer host estático com HTTPS serve. **HTTPS não é opcional**: sem ele o Android não instala como app nem libera notificação.
+| Aba | Sub | O que faz |
+|---|---|---|
+| **Rotina** | Metas | Metas diárias e semanais. Marcar, ou contar (água em ml, pausas). Dá para ver o dia do outro em modo leitura. |
+| | Agenda | Calendário do mês. Eventos podem ser privados ou compartilhados. Dois pontinhos por dia mostram quem fechou todas as metas. |
+| **Dinheiro** | Individual | Ganhou, gastou, guardou e o que sobrou, mês a mês. |
+| | Compartilhado | Os dois somados, mais a quebra de quem gastou e guardou quanto. |
+| **Saúde** | Treino | Treinos montados por pessoa. Força grava série a série (reps × carga); cardio grava tempo e distância e calcula pace e velocidade média. |
+| | Dieta | Refeições do dia, com cardápio editável. |
+| **Estudo** | — | Cronômetro de sessão, aulas assistidas, baterias de questões com acertos e erros, tags de assunto e de tipo de prova, e aproveitamento por assunto. |
+| **Duelo** | Semana / Mês / Geral | Placar de um contra o outro, com a quebra de onde cada ponto veio. |
+| **Ajustes** | — | Conexão com o Supabase, horários, notificações, .ics e backup. |
 
-**Vercel (mais rápido)**
-1. Entre em vercel.com e faça login.
-2. "Add New… → Project → Deploy" e arraste a pasta inteira.
-3. Sem framework, sem build command, output directory = a raiz.
-4. Sai uma URL `https://algo.vercel.app`. Pronto.
+## Ligar o compartilhamento (Supabase)
 
-Alternativas equivalentes: Netlify (arrasta a pasta em app.netlify.com/drop), Cloudflare Pages, GitHub Pages.
+Sem isto o app funciona inteiro, só que sozinho: cada aparelho fica com os próprios dados
+e nada é compartilhado. Para os dois se enxergarem:
+
+1. Crie uma conta em [supabase.com](https://supabase.com) e um projeto novo (plano gratuito serve).
+2. **SQL Editor** → cole o conteúdo de `supabase.sql` → **Run**.
+3. **Authentication → Users → Add user**, duas vezes, marcando *Auto Confirm User*:
+   - `luis@agenda.app`
+   - `mayla@agenda.app`
+
+   A senha definida aqui é a que passa a valer no app. Como agora ela é conferida no
+   servidor, use algo melhor que `123456`.
+4. **Project Settings → API**, copie *Project URL* e a chave *anon / publishable*.
+5. No app: **Ajustes → Sincronização**, cole os dois valores, **Salvar e conectar**,
+   depois **Sair** e entrar de novo. O ponto ao lado de "Conectado" fica verde.
+6. Repita o passo 5 no outro celular.
+
+A chave *anon* fica visível no navegador — é assim mesmo, ela é feita para isso. Quem
+protege os dados é o Row Level Security do `supabase.sql`: sem login não se lê nada, e
+cada conta só escreve no que é dela. **Nunca** cole aqui a chave `service_role`.
+
+## Como a sincronia se comporta
+
+- Tudo é gravado **primeiro no aparelho**. A tela nunca espera a internet.
+- A cada mudança, um envio é agendado; ao minimizar o app, o envio sai na hora.
+- Sem internet, sem servidor ou sem configuração, o app continua funcionando inteiro.
+  Quando a conexão volta, ele empurra o que ficou pendente.
+- Conflito entre os dois aparelhos resolve pelo mais recente, registro a registro.
+- Apagar não apaga de verdade: marca `apagado`, para a exclusão também viajar.
+
+## Login
+
+Com Supabase configurado, a senha é conferida no servidor — é autenticação de verdade.
+Sem ele, o login é local: separa os perfis no aparelho, mas **não é segurança**, porque
+quem abre o código-fonte contorna.
 
 ## Instalar no Android
 
-1. Abra a URL no **Chrome**.
-2. Menu ⋮ → **Adicionar à tela inicial** → Instalar.
-3. O ícone aparece na gaveta de apps e abre em tela cheia, sem barra de navegador.
-4. Funciona offline depois da primeira abertura.
+Chrome → abra a URL → menu ⋮ → **Adicionar à tela inicial**. Funciona offline depois da
+primeira abertura. Se atualizar o app e o celular insistir na versão antiga, feche e abra
+de novo — o service worker troca de versão na segunda abertura.
 
-## Notificações — leia esta parte
+## Notificações
 
-São três camadas, e só a primeira funciona com o celular no bolso.
+Alerta dentro do app só toca com ele aberto. Para tocar com o celular no bolso:
+**Ajustes → Baixar agenda (.ics)** e importe no Google Agenda. Ele gera eventos
+recorrentes com alarme para refeições, treinos, água, pausas, leitura e seus eventos
+com hora marcada.
 
-### 1. Calendário (.ics) — a que realmente funciona
-Ajustes → "Calendário" → escolha o horário do treino → **Baixar agenda (.ics)**.
-No Android: toque no arquivo baixado e escolha importar no Google Agenda. Ou, pelo computador, em
-calendar.google.com → Configurações → Importar e exportar → Importar.
-
-Cria eventos recorrentes com alarme para:
-- 5 refeições por dia, com o cardápio do dia escrito na descrição
-- treino nos dias certos (A a E, segunda a sexta)
-- água às 8h, 11h, 14h, 17h e 20h
-- levantar e andar de hora em hora, 9h–18h, segunda a sexta (pode ser desligado em Ajustes)
-- estudo (seg–sex, 21h) e leitura (diária, 22h20)
-
-Depois disso o Android notifica sozinho, para sempre, sem depender do app estar aberto.
-Se mudar o horário do treino depois, apague os eventos antigos e gere de novo.
-
-### 2. Alertas no app
-Ajustes → "Ativar notificações". Dispara enquanto o app estiver aberto — no computador durante
-o dia de trabalho funciona bem. **Não** funciona com o app fechado.
-
-### 3. Notificação com o app fechado, vinda do próprio app
-Exigiria Web Push: servidor, chaves VAPID, banco de assinaturas e um cron. É viável na Vercel
-(serverless function + Vercel Cron + KV), mas deixa de ser um site estático e passa a ter
-manutenção. A camada 1 entrega o mesmo resultado sem nada disso.
-
-## Onde os dados ficam
-
-No armazenamento do próprio navegador do celular. Não sobem para lugar nenhum.
-
-Consequências:
-- limpar dados do Chrome apaga tudo
-- desinstalar o app pode apagar tudo
-- não sincroniza entre celular e computador
-
-**Faça backup uma vez por mês:** Ajustes → Backup → Exportar tudo → copie o texto e guarde
-(e-mail para si mesmo já resolve). Para restaurar, cole o mesmo texto e clique em Importar.
-
-## A barra de conversa embaixo
-
-Escrever "adicione dentista terça 15h" só funciona **dentro do Claude**, onde a chamada à API é
-autenticada automaticamente. No seu domínio ela não vai funcionar — não há chave de API, e colocar
-uma no código de um site público exporia a chave para qualquer pessoa.
-
-No app hospedado, use:
-- **Adicionar à mão** (aba Dia) para compromissos avulsos
-- **Backup e importação** (Ajustes) para colar blocos JSON gerados no chat, no formato:
-
-```json
-{"add":[{"date":"2026-08-11","cat":"outro","title":"Dentista","time":"15:00","detail":""}],
- "tx":[{"date":"2026-08-11","type":"out","amount":180.00,"desc":"Dentista"}]}
-```
+Notificação de verdade com o app fechado exigiria Web Push: chaves VAPID, um endpoint
+para guardar as inscrições e um cron. Dá para fazer em cima do mesmo Supabase, mas é
+outra empreitada.
 
 ## Manutenção
 
-O cardápio, os treinos e os horários estão no topo do `<script>` em `index.html`, nas constantes
-`CARDAPIO`, `TREINO` e `AGUA_H`. Mudou o plano, edite ali e suba de novo. Dias já criados mantêm o
-conteúdo antigo — use "Regerar rotina do dia" para atualizar um dia específico.
+Cardápio base, treinos iniciais, horários de água e pausa e **quanto vale cada ponto no
+Duelo** estão no topo de `js/dados.js`, nas constantes `CARDAPIO`, `TREINOS_LUIS`,
+`AGUA_H`, `PAUSA_H` e `PONTOS`. As constantes só semeiam contas novas — depois disso,
+metas, refeições e treinos viram dados editáveis dentro do próprio app.
+
+Ao publicar uma versão nova, **suba o número do cache** em `sw.js`
+(`const CACHE = 'agenda-vN'`), senão o celular continua servindo a versão antiga.
+
+## Backup
+
+**Ajustes → Backup → Exportar tudo**, copie o texto e guarde. Com o Supabase ligado os
+dados já estão em dois lugares, mas backup manual não faz mal a ninguém.
