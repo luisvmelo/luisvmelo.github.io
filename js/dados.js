@@ -120,7 +120,22 @@ let salvarTimer = null;
 
 const chaveLocal = () => `agenda2-${USUARIO}`;
 
-function indexar(){ PORID = new Map(DB.map(r=>[r.id,r])); }
+/* Índice por tipo. Sem ele, cada listar() varre o array inteiro — e uma
+   tela chega a chamar listar() centenas de vezes. */
+let IDX = null;
+function invalidar(){ IDX = null; }
+function indicePorTipo(){
+  if(IDX) return IDX;
+  IDX = new Map();
+  for(const r of DB){
+    if(r.apagado) continue;
+    let a = IDX.get(r.tipo);
+    if(!a){ a = []; IDX.set(r.tipo, a); }
+    a.push(r);
+  }
+  return IDX;
+}
+function indexar(){ PORID = new Map(DB.map(r=>[r.id,r])); invalidar(); }
 
 async function carregarLocal(){
   const raw = await store.get(chaveLocal());
@@ -147,10 +162,12 @@ function gravarLocal(){
 
 /* --- consultas --- */
 function listar(f={}){
-  return DB.filter(r=>{
+  let base;
+  if(f.tipo)       base = indicePorTipo().get(f.tipo) || [];
+  else if(f.tipos) base = f.tipos.flatMap(t => indicePorTipo().get(t) || []);
+  else             base = DB;
+  return base.filter(r=>{
     if(r.apagado) return false;
-    if(f.tipo && r.tipo!==f.tipo) return false;
-    if(f.tipos && !f.tipos.includes(r.tipo)) return false;
     if(f.dono && r.dono!==f.dono) return false;
     if(f.data && r.data!==f.data) return false;
     if(f.de && (!r.data || r.data<f.de)) return false;
@@ -163,7 +180,7 @@ const obter = id => PORID.get(id);
 function criar(tipo, {data=null, payload={}, compartilhado=false, dono=USUARIO}={}){
   const r = {id:uid(), dono, tipo, data, payload, compartilhado, apagado:false,
              atualizado_em:agora(), _sujo:true};
-  DB.push(r); PORID.set(r.id, r); gravarLocal(); agendarSync();
+  DB.push(r); PORID.set(r.id, r); invalidar(); gravarLocal(); agendarSync();
   return r;
 }
 function atualizar(id, mudanca){
@@ -171,13 +188,13 @@ function atualizar(id, mudanca){
   if(r.dono !== USUARIO) return null;           // não mexo no que é do outro
   Object.assign(r, mudanca);
   r.atualizado_em = agora(); r._sujo = true;
-  gravarLocal(); agendarSync();
+  invalidar(); gravarLocal(); agendarSync();
   return r;
 }
 function apagar(id){
   const r = PORID.get(id); if(!r || r.dono!==USUARIO) return false;
   r.apagado = true; r.atualizado_em = agora(); r._sujo = true;
-  gravarLocal(); agendarSync();
+  invalidar(); gravarLocal(); agendarSync();
   return true;
 }
 
@@ -295,6 +312,7 @@ async function sincronizar({silencioso=true}={}){
       if(!maior || new Date(v.atualizado_em) > new Date(maior)) maior = v.atualizado_em;
     }
     if(maior) ultimaSync = maior;
+    if(vindos.length) invalidar();
 
     gravarLocalJa();
     marcarSync("on", "em dia");
@@ -460,12 +478,25 @@ function finDoPeriodo(dono, de, ate){
 }
 
 /* ================= placar do Duelo ================= */
+/* Da primeira marcação de qualquer um até hoje. Sem isto o placar "Geral"
+   varreria milênios de dias vazios. */
+function limitesGeral(){
+  let min = hojeIso();
+  for(const r of DB){ if(r.data && !r.apagado && r.data < min) min = r.data; }
+  return [min, hojeIso()];
+}
+
 function pontuar(dono, de, ate){
   const d = {metas:0, dias:0, semanais:0, refeicoes:0, treinos:0, estudo:0, questoes:0, guardou:0};
 
-  /* varre dia a dia para saber quem fechou o dia inteiro */
-  for(let cur=fromIso(de); iso(cur)<=ate; cur.setDate(cur.getDate()+1)){
-    const dia = iso(cur);
+  /* Só os dias em que existe alguma marcação. Dia sem registro nenhum
+     rende zero de qualquer jeito, então varrer o calendário inteiro só
+     queima tempo. */
+  const diasComDado = new Set();
+  listar({tipo:"meta_log",     dono, de, ate}).forEach(l=>diasComDado.add(l.data));
+  listar({tipo:"refeicao_log", dono, de, ate}).forEach(l=>diasComDado.add(l.data));
+
+  for(const dia of diasComDado){
     const ms = metasDoDia(dono, dia);
     const feitas = ms.filter(m=>m.feito).length;
     d.metas += feitas * PONTOS.meta;

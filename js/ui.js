@@ -192,9 +192,6 @@ function renderMetas(){
         <div class="d">meta da semana</div></div></div>`).join('')
     : `<p class="empty">Nenhuma meta semanal.</p>`;
 
-  const pctDia = linhas.length ? Math.round(100*linhas.filter(m=>m.feito).length/linhas.length) : 0;
-  if(dono===USUARIO && dMetas===hojeIso()) el('hoje-pct').textContent = pctDia+"%";
-
   el('novaMetaBtn').disabled = soLeitura('metas');
 }
 
@@ -741,13 +738,14 @@ function painelDuelo(alvo, de, ate, rotulo){
       Para mudar, edite <code>PONTOS</code> no topo de <code>js/dados.js</code>.</p>
     </div></details>`;
 }
+/* Só o painel que está à vista — os outros dois são recalculados quando
+   você trocar de sub-aba. */
 function renderDuelo(){
   const hoje = new Date();
-  const [sd, sa] = limitesSemana(hoje);
-  const [md, ma] = limitesMes(hoje);
-  painelDuelo('pDuelSem', sd, sa, "Semana atual");
-  painelDuelo('pDuelMes', md, ma, "Mês atual");
-  painelDuelo('pDuelGeral', "2000-01-01", "2999-12-31", "Desde sempre");
+  const visivel = ['pDuelSem','pDuelMes','pDuelGeral'].find(id=>!el(id).hidden) || 'pDuelSem';
+  if(visivel==='pDuelSem')   painelDuelo('pDuelSem', ...limitesSemana(hoje), "Semana atual");
+  if(visivel==='pDuelMes')   painelDuelo('pDuelMes', ...limitesMes(hoje), "Mês atual");
+  if(visivel==='pDuelGeral') painelDuelo('pDuelGeral', ...limitesGeral(), "Desde o começo");
 }
 
 /* ================= AJUSTES ================= */
@@ -845,15 +843,30 @@ function tick(){
 }
 
 /* ================= render geral ================= */
-function renderTudo(){
-  if(!USUARIO) return;
+function renderCabecalho(){
   const d = new Date();
   el('hoje-label').textContent = `${DOW[d.getDay()]} · ${d.getDate()} de ${MES[d.getMonth()]}`;
   el('hoje-title').textContent = "Hoje";
   el('whoUser').textContent = nomeDe(USUARIO);
+  const ms = metasDoDia(USUARIO, hojeIso());
+  el('hoje-pct').textContent = (ms.length ? Math.round(100*ms.filter(m=>m.feito).length/ms.length) : 0) + "%";
+}
+
+/* Só a seção visível. Antes isto redesenhava as oito abas a cada toque —
+   inclusive o Duelo, que é de longe a conta mais cara do app. */
+function renderTudo(){
+  if(!USUARIO) return;
+  renderCabecalho();
   montarWhoSwitch();
-  renderMetas(); renderAgenda(); renderFinInd(); renderFinComp();
-  renderTreino(); renderDieta(); renderEstudo(); renderDuelo(); renderCfg();
+  const sec = document.querySelector('.sec:not([hidden])');
+  switch(sec ? sec.id : 'secRotina'){
+    case 'secRotina':   renderMetas(); renderAgenda(); break;
+    case 'secDinheiro': renderFinInd(); renderFinComp(); break;
+    case 'secSaude':    renderTreino(); renderDieta(); break;
+    case 'secEstudo':   renderEstudo(); break;
+    case 'secDuelo':    renderDuelo(); break;
+    case 'secCfg':      renderCfg(); break;
+  }
   pintarTimer();
 }
 
@@ -944,7 +957,7 @@ function ligarCliques(){
         const novo = {...r, dono:USUARIO, atualizado_em:agora(), _sujo:true};
         DB.push(novo); PORID.set(novo.id, novo); n++;
       });
-      gravarLocalJa(); agendarSync(); renderTudo();
+      invalidar(); gravarLocalJa(); agendarSync(); renderTudo();
       toast(n+" registros importados.");
     }catch(e){ toast("JSON inválido."); }
   };
