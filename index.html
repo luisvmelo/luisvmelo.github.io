@@ -294,11 +294,28 @@
   <!-- ============ SAÚDE ============ -->
   <section class="sec" id="secSaude" hidden>
     <nav class="subtabs" data-group="saude">
-      <button class="subtab" aria-selected="true"  data-p="pTreino">Treino</button>
+      <button class="subtab" aria-selected="true"  data-p="pSaudeMetas">Metas</button>
+      <button class="subtab" aria-selected="false" data-p="pTreino">Treino</button>
       <button class="subtab" aria-selected="false" data-p="pDieta">Dieta</button>
     </nav>
 
-    <div class="panel" id="pTreino">
+    <div class="panel" id="pSaudeMetas">
+      <div class="whoswitch" data-who="metas"></div>
+      <p class="readonly-note" hidden></p>
+      <div class="datebar">
+        <button type="button" data-nav="metas:-1">← ontem</button>
+        <span class="cur" id="saudeMetasCur">—</span>
+        <button type="button" data-nav="metas:+1">amanhã →</button>
+      </div>
+      <div id="saudeMetasBody"></div>
+      <div class="group-h">Metas semanais de saúde</div>
+      <div id="saudeMetasSemana"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn sm" type="button" id="novaMetaSaudeBtn">+ Nova meta de saúde</button>
+      </div>
+    </div>
+
+    <div class="panel" id="pTreino" hidden>
       <div class="whoswitch" data-who="treino"></div>
       <p class="readonly-note" hidden></p>
       <div class="group-h">Meus treinos <button class="btn sm" type="button" id="novoTreinoBtn">+ Montar treino</button></div>

@@ -155,14 +155,16 @@ function ligarNavegacao(){
 }
 
 /* ================= ROTINA · metas ================= */
-function renderMetas(){
+/* Uma função só desenha a lista de metas nas duas abas. `area` diz quais
+   entram: "rotina" na aba Rotina, "saude" dentro de Saúde. */
+function renderMetasEm(painel, area, ids){
   const dono = VENDO.metas;
-  avisoLeitura('pMetas','metas');
+  avisoLeitura(painel,'metas');
   const d = fromIso(dMetas);
-  el('metasCur').textContent = `${DOWS[d.getDay()]} · ${d.getDate()} ${MES[d.getMonth()].slice(0,3)}`;
+  el(ids.cur).textContent = `${DOWS[d.getDay()]} · ${d.getDate()} ${MES[d.getMonth()].slice(0,3)}`;
 
-  const linhas = metasDoDia(dono, dMetas);
-  const box = el('metasBody');
+  const linhas = metasDoDia(dono, dMetas, area);
+  const box = el(ids.corpo);
   if(!linhas.length){ box.innerHTML = `<p class="empty">Nenhuma meta para este dia.</p>`; }
   else box.innerHTML = linhas.map(m=>{
     const p = m.def.payload;
@@ -184,30 +186,51 @@ function renderMetas(){
     </div>`;
   }).join('');
 
-  const sem = metasDaSemana(dono, dMetas);
-  el('metasSemana').innerHTML = sem.length
+  const sem = metasDaSemana(dono, dMetas, area);
+  el(ids.semana).innerHTML = sem.length
     ? sem.map(m=>`<div class="item ${m.feito?'done':''}" style="--c:var(--purple)">
         <input type="checkbox" data-metasem="${m.def.id}" ${m.feito?'checked':''} ${soLeitura('metas')?'disabled':''}>
         <div class="txt"><div class="t">${esc(m.def.payload.titulo)}</div>
         <div class="d">meta da semana</div></div></div>`).join('')
     : `<p class="empty">Nenhuma meta semanal.</p>`;
 
-  el('novaMetaBtn').disabled = soLeitura('metas');
+  el(ids.botao).disabled = soLeitura('metas');
 }
 
-async function novaMeta(){
-  const v = await modalForm("Nova meta", [
-    {k:"titulo", l:"Título", t:"text", req:true},
-    {k:"periodo", l:"Frequência", t:"select", opts:[{v:"diario",n:"Diária"},{v:"semanal",n:"Semanal"}]},
-    {k:"alvo", l:"Alvo (1 = só marcar feito)", t:"number", min:1, step:1},
-    {k:"unidade", l:"Unidade (ml, páginas, km…)", t:"text"},
-    {k:"passo", l:"Botão soma quanto", t:"number", min:1, step:1},
-    {k:"dias", l:"Dias da semana", t:"dias"}
-  ], {alvo:1, passo:1, dias:[0,1,2,3,4,5,6]});
+function renderMetas(){
+  renderMetasEm('pMetas', 'rotina',
+    {cur:'metasCur', corpo:'metasBody', semana:'metasSemana', botao:'novaMetaBtn'});
+}
+function renderSaudeMetas(){
+  renderMetasEm('pSaudeMetas', 'saude',
+    {cur:'saudeMetasCur', corpo:'saudeMetasBody', semana:'saudeMetasSemana', botao:'novaMetaSaudeBtn'});
+}
+
+const CAMPOS_META = [
+  {k:"titulo", l:"Título", t:"text", req:true},
+  {k:"area", l:"Em que aba aparece", t:"select", opts:[{v:"rotina",n:"Rotina → Metas"},{v:"saude",n:"Saúde → Metas"}]},
+  {k:"periodo", l:"Frequência", t:"select", opts:[{v:"diario",n:"Diária"},{v:"semanal",n:"Semanal"}]},
+  {k:"alvo", l:"Alvo (1 = só marcar feito)", t:"number", min:1, step:1},
+  {k:"unidade", l:"Unidade (ml, páginas, km…)", t:"text"},
+  {k:"passo", l:"Botão soma quanto", t:"number", min:1, step:1},
+  {k:"dias", l:"Dias da semana", t:"dias"}
+];
+
+async function novaMeta(area="rotina"){
+  const v = await modalForm("Nova meta", CAMPOS_META, {area, alvo:1, passo:1, dias:[0,1,2,3,4,5,6]});
   if(!v) return;
-  criar("meta_def", {payload:{titulo:v.titulo, periodo:v.periodo, alvo:Math.max(1,v.alvo||1),
-    unidade:v.unidade, passo:Math.max(1,v.passo||1), dias:v.dias, cat:"outro", ativo:true}});
+  criar("meta_def", {payload:{titulo:v.titulo, area:v.area, periodo:v.periodo,
+    alvo:Math.max(1,v.alvo||1), unidade:v.unidade, passo:Math.max(1,v.passo||1),
+    dias:v.dias, ativo:true}});
   toast("Meta criada."); renderTudo();
+}
+
+async function editarMeta(id){
+  const d = obter(id); if(!d) return;
+  const v = await modalForm("Editar meta", CAMPOS_META, {...d.payload, area:d.payload.area||"rotina"});
+  if(!v) return;
+  atualizar(id, {payload:{...d.payload, ...v, alvo:Math.max(1,v.alvo||1), passo:Math.max(1,v.passo||1)}});
+  toast("Meta salva."); renderTudo();
 }
 
 function gerirMetas(){
@@ -215,13 +238,18 @@ function gerirMetas(){
   modalHtml("Minhas metas", defs.length ? defs.map(d=>`
     <div class="item" style="--c:var(--cobalt)"><div class="txt">
       <div class="t">${esc(d.payload.titulo)}</div>
-      <div class="d">${d.payload.periodo==="semanal"?"semanal":"diária"} · alvo ${d.payload.alvo} ${esc(d.payload.unidade||"")}</div>
-    </div><button class="del" type="button" data-delmeta="${d.id}" title="Apagar">×</button></div>`).join('')
+      <div class="d">${(d.payload.area||"rotina")==="saude"?"Saúde":"Rotina"} ·
+        ${d.payload.periodo==="semanal"?"semanal":"diária"} · alvo ${d.payload.alvo} ${esc(d.payload.unidade||"")}</div>
+    </div>
+    <button class="btn sm" type="button" data-editmeta="${d.id}">Editar</button>
+    <button class="del" type="button" data-delmeta="${d.id}" title="Apagar">×</button></div>`).join('')
     : `<p class="empty">Nenhuma meta ainda.</p>`,
   ()=>{
     el('modalBody').addEventListener('click', ev=>{
-      const b = ev.target.closest('[data-delmeta]'); if(!b) return;
-      apagar(b.dataset.delmeta); dlg().close(); toast("Meta apagada."); renderTudo();
+      const ed = ev.target.closest('[data-editmeta]');
+      const dl = ev.target.closest('[data-delmeta]');
+      if(ed){ dlg().close(); editarMeta(ed.dataset.editmeta); return; }
+      if(dl){ apagar(dl.dataset.delmeta); dlg().close(); toast("Meta apagada."); renderTudo(); }
     });
   });
 }
@@ -862,7 +890,7 @@ function renderTudo(){
   switch(sec ? sec.id : 'secRotina'){
     case 'secRotina':   renderMetas(); renderAgenda(); break;
     case 'secDinheiro': renderFinInd(); renderFinComp(); break;
-    case 'secSaude':    renderTreino(); renderDieta(); break;
+    case 'secSaude':    renderSaudeMetas(); renderTreino(); renderDieta(); break;
     case 'secEstudo':   renderEstudo(); break;
     case 'secDuelo':    renderDuelo(); break;
     case 'secCfg':      renderCfg(); break;
@@ -906,8 +934,9 @@ function ligarCliques(){
     if(r){ marcarRefeicao(obter(r.dataset.ref), dDieta, ev.target.checked); renderTudo(); return; }
   });
 
-  el('novaMetaBtn').onclick   = novaMeta;
-  el('gerirMetasBtn').onclick = gerirMetas;
+  el('novaMetaBtn').onclick      = ()=>novaMeta("rotina");
+  el('novaMetaSaudeBtn').onclick = ()=>novaMeta("saude");
+  el('gerirMetasBtn').onclick    = gerirMetas;
   el('novoEventoBtn').onclick = novoEvento;
   el('novaTxBtn').onclick     = novaTx;
   el('novoTreinoBtn').onclick = novoTreinoDef;
@@ -1017,7 +1046,7 @@ el('loginForm').addEventListener('submit', async ev=>{
     /* mesma ordem do login: puxar antes de semear, senão um aparelho novo
        cria metas duplicadas ao lado das que já estão no servidor */
     if(SB.ligado){ marcarSync("sync","sincronizando"); await sincronizar().catch(()=>{}); }
-    semearSeVazio();
+    semearSeVazio(); migrarAreas();
     if(!SB.ligado) marcarSync("off","só neste aparelho");
     await iniciar();
   }else{

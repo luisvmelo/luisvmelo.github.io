@@ -355,12 +355,13 @@ async function sincronizar({silencioso=true}={}){
 function semearSeVazio(){
   if(listar({tipo:"meta_def", dono:USUARIO}).length) return false;
 
+  /* `area` decide em que aba a meta aparece: "rotina" ou "saude". */
   const metas = [
-    {titulo:"Beber água",        cat:"saude",   periodo:"diario", alvo:3000, unidade:"ml",     passo:250, dias:[0,1,2,3,4,5,6]},
-    {titulo:"Levantar e andar",  cat:"saude",   periodo:"diario", alvo:8,    unidade:"pausas", passo:1,   dias:[1,2,3,4,5]},
-    {titulo:"8.000 passos",      cat:"saude",   periodo:"diario", alvo:1,    unidade:"",       passo:1,   dias:[0,1,2,3,4,5,6]},
-    {titulo:"Leitura 20 min",    cat:"leitura", periodo:"diario", alvo:1,    unidade:"",       passo:1,   dias:[0,1,2,3,4,5,6]},
-    {titulo:"Dormir 7h",         cat:"saude",   periodo:"diario", alvo:1,    unidade:"",       passo:1,   dias:[0,1,2,3,4,5,6]}
+    {titulo:"Beber água",        area:"saude",  periodo:"diario", alvo:3000, unidade:"ml",     passo:250, dias:[0,1,2,3,4,5,6]},
+    {titulo:"8.000 passos",      area:"saude",  periodo:"diario", alvo:1,    unidade:"",       passo:1,   dias:[0,1,2,3,4,5,6]},
+    {titulo:"Dormir 7h",         area:"saude",  periodo:"diario", alvo:1,    unidade:"",       passo:1,   dias:[0,1,2,3,4,5,6]},
+    {titulo:"Levantar e andar",  area:"rotina", periodo:"diario", alvo:8,    unidade:"pausas", passo:1,   dias:[1,2,3,4,5]},
+    {titulo:"Leitura 20 min",    area:"rotina", periodo:"diario", alvo:1,    unidade:"",       passo:1,   dias:[0,1,2,3,4,5,6]}
   ];
   metas.forEach(m => criar("meta_def", {payload:{...m, ativo:true}}));
 
@@ -389,6 +390,18 @@ function semearSeVazio(){
   return true;
 }
 
+/* Metas criadas antes de existir o campo `area` ficariam todas na Rotina.
+   Classifica uma única vez, pelo assunto da meta. Roda depois do primeiro
+   sync, então não briga com o que vem do outro aparelho. */
+function migrarAreas(){
+  const saude = /água|agua|passos|dormir|sono|peso|caminh/i;
+  listar({tipo:"meta_def", dono:USUARIO}).forEach(d=>{
+    if(d.payload.area) return;
+    const area = (d.payload.unidade==="ml" || saude.test(d.payload.titulo)) ? "saude" : "rotina";
+    atualizar(d.id, {payload:{...d.payload, area}});
+  });
+}
+
 function config(){
   const c = listar({tipo:"cfg", dono:USUARIO})[0];
   return c ? c.payload : {treinoHora:"05:30", leituraHora:"22:20", pausaIcs:true};
@@ -407,10 +420,13 @@ function descricaoRefeicao(def, dataIso){
   return d;
 }
 
-function metasDoDia(dono, dataIso){
+/* `area` opcional: sem ela vêm todas — é assim que o placar e o percentual
+   do cabeçalho contam o dia inteiro, não só uma aba. */
+function metasDoDia(dono, dataIso, area){
   const dow = fromIso(dataIso).getDay();
   const defs = listar({tipo:"meta_def", dono}).filter(d=>d.payload.ativo!==false
     && d.payload.periodo==="diario"
+    && (!area || (d.payload.area||"rotina")===area)
     && (!d.payload.dias || d.payload.dias.includes(dow)));
   const logs = listar({tipo:"meta_log", dono, data:dataIso});
   return defs.map(def=>{
@@ -420,9 +436,11 @@ function metasDoDia(dono, dataIso){
     return {def, log, valor, alvo, feito: valor>=alvo};
   });
 }
-function metasDaSemana(dono, dataIso){
+function metasDaSemana(dono, dataIso, area){
   const [ini] = limitesSemana(fromIso(dataIso));
-  const defs = listar({tipo:"meta_def", dono}).filter(d=>d.payload.ativo!==false && d.payload.periodo==="semanal");
+  const defs = listar({tipo:"meta_def", dono}).filter(d=>d.payload.ativo!==false
+    && d.payload.periodo==="semanal"
+    && (!area || (d.payload.area||"rotina")===area));
   const logs = listar({tipo:"meta_log", dono, data:ini});
   return defs.map(def=>{
     const log = logs.find(l=>l.payload.defId===def.id);
@@ -569,7 +587,7 @@ async function entrar(usuario, senha){
   async function abrir(u, semear=true){
     USUARIO = u; OUTRO = u==="luis" ? "mayla" : "luis";
     await carregarLocal();
-    if(semear) semearSeVazio();
+    if(semear){ semearSeVazio(); migrarAreas(); }
   }
 
   if(SB.ligado){
@@ -584,7 +602,7 @@ async function entrar(usuario, senha){
       await abrir(u, false);
       marcarSync("on","conectado");
       await sincronizar({silencioso:false});
-      semearSeVazio();
+      semearSeVazio(); migrarAreas();
       return {ok:true};
     }
 
