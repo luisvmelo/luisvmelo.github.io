@@ -1013,10 +1013,13 @@ el('loginForm').addEventListener('submit', async ev=>{
     /* sessão local existe; com Supabase ligado ainda preciso de token válido */
     if(SB.ligado && !(await garantirToken())){ el('loginUser').value = s; el('loginPass').focus(); return; }
     USUARIO = s; OUTRO = s==="luis" ? "mayla" : "luis";
-    await carregarLocal(); semearSeVazio();
-    marcarSync(SB.ligado ? "on" : "off", SB.ligado ? "em dia" : "só neste aparelho");
+    await carregarLocal();
+    /* mesma ordem do login: puxar antes de semear, senão um aparelho novo
+       cria metas duplicadas ao lado das que já estão no servidor */
+    if(SB.ligado){ marcarSync("sync","sincronizando"); await sincronizar().catch(()=>{}); }
+    semearSeVazio();
+    if(!SB.ligado) marcarSync("off","só neste aparelho");
     await iniciar();
-    if(SB.ligado) sincronizar().catch(()=>{});
   }else{
     el('loginUser').focus();
   }

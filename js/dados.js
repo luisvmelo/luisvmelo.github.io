@@ -566,9 +566,10 @@ async function entrar(usuario, senha){
 
   await carregarConfigSb();
 
-  async function abrir(u){
+  async function abrir(u, semear=true){
     USUARIO = u; OUTRO = u==="luis" ? "mayla" : "luis";
-    await carregarLocal(); semearSeVazio();
+    await carregarLocal();
+    if(semear) semearSeVazio();
   }
 
   if(SB.ligado){
@@ -577,9 +578,13 @@ async function entrar(usuario, senha){
     catch(e){ caiu = true; }
 
     if(ok){
-      await abrir(u);
+      /* Semeia só DEPOIS de puxar do servidor. Num aparelho novo o banco
+         local começa vazio, e semear antes criaria um segundo jogo de
+         metas, refeições e treinos ao lado do que já existe lá. */
+      await abrir(u, false);
       marcarSync("on","conectado");
-      sincronizar({silencioso:false});
+      await sincronizar({silencioso:false});
+      semearSeVazio();
       return {ok:true};
     }
 
