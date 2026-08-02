@@ -300,7 +300,11 @@ async function sincronizar({silencioso=true}={}){
   sincronizando = true;
   if(!silencioso) marcarSync("sync","sincronizando");
   try{
-    if(!(await garantirToken())){ marcarSync("erro","sessão expirada — entre de novo"); return false; }
+    if(!(await garantirToken())){
+      marcarSync("erro", SB.refresh ? "sessão expirada — entre de novo"
+                                    : "sem login no servidor — só este aparelho");
+      return false;
+    }
 
     /* empurra */
     const sujos = DB.filter(r=>r._sujo && r.dono===USUARIO);
