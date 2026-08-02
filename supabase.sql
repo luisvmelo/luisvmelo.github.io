@@ -29,6 +29,30 @@ create index if not exists registros_dono_tipo_idx  on public.registros (dono, t
 create index if not exists registros_data_idx       on public.registros (data);
 
 -- ---------------------------------------------------------------------
+-- 1b. O carimbo de tempo é do SERVIDOR, nunca do celular.
+--
+--     A sincronia funciona perguntando "o que mudou depois de tal
+--     horário?". Se o carimbo viesse do aparelho, um registro criado
+--     offline às 19h e enviado às 20h chegaria marcado como 19h — e
+--     qualquer celular que já tivesse sincronizado às 19h30 nunca mais
+--     o veria. Relógio adiantado ou atrasado causa o mesmo estrago.
+--
+--     O gatilho abaixo sobrescreve o que o cliente mandar, então a
+--     ordem passa a ser a do servidor, igual para todo mundo.
+-- ---------------------------------------------------------------------
+create or replace function public.carimbar_registro()
+returns trigger language plpgsql as $$
+begin
+  new.atualizado_em := now();
+  return new;
+end $$;
+
+drop trigger if exists registros_carimbo on public.registros;
+create trigger registros_carimbo
+  before insert or update on public.registros
+  for each row execute function public.carimbar_registro();
+
+-- ---------------------------------------------------------------------
 -- 2. Segurança por linha.
 --    Sem isto, qualquer pessoa com a chave publicável (que fica no
 --    código do site, à vista) leria e escreveria tudo. Com isto, é
