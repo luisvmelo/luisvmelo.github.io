@@ -126,9 +126,39 @@
   textarea.json{width:100%;min-height:110px;font-family:var(--mono);font-size:12px}
   .row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
   .row label{font-size:13.5px}
+
+  .whoami{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
+  .whoami b{color:var(--cobalt);font-weight:600}
+
+  body.locked .wrap,body.locked .ask{display:none}
+  body:not(.locked) .login{display:none}
+  .login{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-box{width:100%;max-width:360px;background:var(--card);border:2px solid var(--ink);border-radius:3px;padding:26px 22px}
+  .login-box .k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--cobalt);margin:0 0 6px}
+  .login-box h2{font-family:var(--display);font-weight:700;font-size:28px;letter-spacing:-.025em;margin:0 0 18px}
+  .login-box label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px}
+  .login-box input{width:100%;margin-bottom:14px}
+  .login-box .btn{width:100%}
+  .login-err{color:var(--alert);font-size:13px;margin:0 0 10px;min-height:19px}
 </style>
 </head>
-<body>
+<body class="locked">
+
+<div class="login" id="login">
+  <form class="login-box" id="loginForm">
+    <p class="k">Agenda</p>
+    <h2>Entrar</h2>
+    <label for="loginUser">Usuário</label>
+    <input id="loginUser" name="username" type="text" autocomplete="username"
+           autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    <label for="loginPass">Senha</label>
+    <input id="loginPass" name="password" type="password" autocomplete="current-password" required>
+    <p class="login-err" id="loginErr" role="alert"></p>
+    <button class="btn primary" type="submit">Entrar</button>
+  </form>
+</div>
+
 <div class="wrap">
 
   <header>
@@ -137,6 +167,7 @@
       <h1 id="hoje-title">—</h1>
     </div>
     <div class="ring"><div><b id="hoje-pct">0%</b><span>do dia feito</span></div></div>
+    <div class="whoami"><span>Conta: <b id="whoUser">—</b></span><button class="btn sm" type="button" id="sairBtn">Sair</button></div>
   </header>
 
   <nav class="tabs" role="tablist">
@@ -375,8 +406,30 @@ const DOW=["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 const DOWS=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 const MES=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
+/* ================= contas =================
+   Login de site estático: serve para separar os dados de cada pessoa no mesmo
+   link — NÃO é segurança. Quem abrir o código-fonte contorna. A senha fica como
+   sha256("agenda-v1|usuario|senha") só para não publicar a senha em texto puro.
+   Cada conta grava num KEY próprio: "<usuario>-agenda-v1".                    */
+const CONTAS={
+  luis :{nome:"Luís" ,hash:"398cf107713a4a5995293717df73e726a8a2e5c10699ed222f3a4271e01f5fab"},
+  mayla:{nome:"Mayla",hash:"ec3296faf2748c7a58722a11a2355d145c3a60d44f9d58783063fb817390ef44"}
+};
+const SESSAO="agenda-sessao";
+let usuario=null;
+
+async function sha256(t){
+  const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function conferir(u,senha){
+  const c=CONTAS[u];
+  if(!c) return false;
+  return (await sha256(`agenda-v1|${u}|${senha}`))===c.hash;
+}
+
 /* ================= armazenamento (Claude ou navegador) ================= */
-const KEY="luis-agenda-v1";
+let KEY=null;
 let storeKind="memória";
 const store={
   async get(k){
@@ -400,8 +453,15 @@ const brl=v=>"R$ "+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFrac
 const esc=s=>String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 
 function save(){
+  if(!KEY) return;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>store.set(KEY,JSON.stringify(state)),350);
+}
+/* grava na hora, sem esperar o debounce — usado ao sair ou ao mandar o app pro fundo */
+function salvarJa(){
+  if(!KEY) return;
+  clearTimeout(saveTimer);
+  try{ store.set(KEY,JSON.stringify(state)); }catch(e){}
 }
 function day(ds,seed=true){
   if(!state.days[ds]){
@@ -742,20 +802,62 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;
   b.onclick=async()=>{deferred.prompt();await deferred.userChoice;deferred=null;b.hidden=true;};});
 
 function renderAll(){renderDay();renderWeek();renderMonth();renderFin();}
-(async()=>{
+
+async function iniciar(){
+  KEY=usuario+"-agenda-v1";
   const raw=await store.get(KEY);
   if(raw){ try{ state=Object.assign({days:{},tx:[],cfg:{waterGoal:3000,treino:"05:30",standGoal:8,standIcs:true},fired:{}},JSON.parse(raw)); }catch(e){} }
+  document.getElementById('whoUser').textContent=CONTAS[usuario].nome;
   document.getElementById('tDate').value=iso(new Date());
   document.getElementById('cfgWater').value=state.cfg.waterGoal||3000;
   document.getElementById('cfgTreino').value=state.cfg.treino||"05:30";
   document.getElementById('cfgStand').value=state.cfg.standGoal||8;
   document.getElementById('cfgStandIcs').checked=state.cfg.standIcs!==false;
-  document.getElementById('storeNote').textContent="Dados salvos em: "+storeKind+".";
+  document.getElementById('storeNote').textContent="Dados salvos em: "+storeKind+" (conta "+CONTAS[usuario].nome+").";
   day(iso(new Date()));
+  document.body.classList.remove('locked');
   notifState(); renderAll(); tick();
+}
+
+document.getElementById('loginForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const err=document.getElementById('loginErr');
+  const btn=e.target.querySelector('button[type=submit]');
+  const u=document.getElementById('loginUser').value.trim().toLowerCase();
+  const p=document.getElementById('loginPass').value;
+  err.textContent=""; btn.disabled=true;
+  try{
+    if(await conferir(u,p)){
+      usuario=u;
+      document.getElementById('loginPass').value="";
+      await store.set(SESSAO,u);
+      await iniciar();
+    }else{
+      err.textContent="Usuário ou senha incorretos.";
+    }
+  }catch(ex){
+    err.textContent="Não deu para verificar a senha neste navegador (precisa de HTTPS).";
+  }
+  btn.disabled=false;
+});
+
+document.getElementById('sairBtn').addEventListener('click',async()=>{
+  salvarJa();
+  await store.set(SESSAO,"");
+  location.reload();
+});
+
+/* garante que o que foi marcado não se perde ao fechar ou minimizar o app */
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') salvarJa(); });
+window.addEventListener('pagehide',salvarJa);
+
+(async()=>{
   if('serviceWorker' in navigator && location.protocol!=='blob:'){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
+  const s=await store.get(SESSAO);
+  if(s&&CONTAS[s]){ usuario=s; await iniciar(); }
+  else{ document.getElementById('loginUser').focus(); }
 })();
 </script>
 </body>
