@@ -38,18 +38,16 @@ O projeto já está ligado. A URL e a chave *publicável* estão em `SB_PADRAO`,
 `js/dados.js`, e o schema de `supabase.sql` já foi aplicado — tabela criada, RLS ligado,
 três policies no lugar. Nenhum aparelho precisa configurar nada.
 
-**Falta só criar as duas contas**, em Authentication → Users → Add user, marcando
-*Auto Confirm User*:
+As duas contas já existem, confirmadas: `luis@agenda.app` e `mayla@agenda.app`. Os
+endereços têm que ser exatamente esses — o RLS descobre o dono de cada registro pelo que
+vem antes do `@`, e a tabela só aceita `luis` ou `mayla`.
 
-- `luis@agenda.app`
-- `mayla@agenda.app`
+**A senha é a única coisa entre a internet e os seus dados**, porque a chave publicável
+está à vista no código e o repositório é público. Para trocar:
+Authentication → Users → clique no usuário → *Reset password*. Não precisa mexer no app.
 
-Os endereços têm que ser exatamente esses: o RLS descobre o dono de cada registro pelo
-que vem antes do `@`, e a tabela só aceita `luis` ou `mayla`.
-
-Escolha senhas **fortes**. Antes elas eram teatro; agora são a única coisa entre a
-internet e os seus dados, porque a chave publicável está à vista no código. Enquanto as
-contas não existirem, o app entra em modo local e avisa na tela.
+Se o servidor recusar o login (conta apagada, senha trocada, projeto pausado), o app não
+trava: entra em modo local, avisa na tela e para de compartilhar até resolver.
 
 A chave publicável ficar exposta é o desenho normal do Supabase: sozinha ela não lê nada.
 Verificado neste projeto — sem login, leitura volta vazia e escrita é recusada pelo RLS.
