@@ -994,7 +994,7 @@ el('loginForm').addEventListener('submit', async ev=>{
       el('loginPass').value = "";
       try{ localStorage.setItem("agenda-sessao", USUARIO); }catch(e){}
       await iniciar();
-      if(r.offline) toast("Entrou offline — sincroniza quando o servidor voltar.");
+      if(r.aviso) toast(r.aviso);
     }else err.textContent = r.erro;
   }catch(e){
     err.textContent = "Não deu para verificar a senha neste navegador (precisa de HTTPS).";

@@ -199,14 +199,34 @@ function apagar(id){
 }
 
 /* ================= Supabase ================= */
+/* Projeto deste app. A chave abaixo é a *publicável* (anon) e é feita para
+   ficar à vista no navegador — sozinha ela não lê nem escreve nada: quem
+   barra é o Row Level Security, que exige login e só deixa cada conta mexer
+   no que é dela. Está verificado: sem token, leitura volta vazia e escrita
+   é recusada.
+
+   NUNCA coloque aqui a chave `service_role` nem a `sb_secret_...`. Essas
+   ignoram o RLS e dariam acesso total a quem abrisse o código-fonte.       */
+const SB_PADRAO = {
+  url: "https://zucnhqvhiqmrqpshmwoy.supabase.co",
+  key: "sb_publishable_6BMbkXB7lwNTTk_8e9Le_A_TPRrqH3_"
+};
+
 const SB = {url:"", key:"", token:"", refresh:"", expira:0, ligado:false};
 let sbEstado = "off";        // off | on | erro | sync
 let aoMudarSync = ()=>{};
 
 async function carregarConfigSb(){
+  SB.url = SB_PADRAO.url; SB.key = SB_PADRAO.key;
   try{
+    /* o que estiver salvo nos Ajustes vence o padrão — permite apontar
+       para outro projeto sem mexer no código */
     const raw = window.localStorage.getItem("agenda-supabase");
-    if(raw){ const o=JSON.parse(raw); SB.url=o.url||""; SB.key=o.key||""; }
+    if(raw){
+      const o = JSON.parse(raw);
+      if(o.desligado){ SB.url=""; SB.key=""; }
+      else { if(o.url) SB.url=o.url; if(o.key) SB.key=o.key; }
+    }
     const s = window.localStorage.getItem("agenda-sb-sessao");
     if(s){ const o=JSON.parse(s); SB.token=o.token||""; SB.refresh=o.refresh||""; SB.expira=o.expira||0; }
   }catch(e){}
@@ -222,7 +242,8 @@ function gravarSessaoSb(){
 function limparSb(){
   SB.url=""; SB.key=""; SB.token=""; SB.refresh=""; SB.expira=0; SB.ligado=false;
   try{
-    window.localStorage.removeItem("agenda-supabase");
+    /* grava a recusa explícita, senão o padrão embutido voltaria sozinho */
+    window.localStorage.setItem("agenda-supabase", JSON.stringify({desligado:true}));
     window.localStorage.removeItem("agenda-sb-sessao");
   }catch(e){}
   marcarSync("off");
@@ -541,30 +562,42 @@ async function entrar(usuario, senha){
 
   await carregarConfigSb();
 
-  if(SB.ligado){
-    let ok = false;
-    try{ ok = await sbLogin(u, senha); }
-    catch(e){
-      /* servidor fora do ar: aceita a senha local para não travar o app */
-      if(await conferirLocal(u, senha)){
-        USUARIO=u; OUTRO = u==="luis"?"mayla":"luis";
-        await carregarLocal(); semearSeVazio();
-        marcarSync("erro","servidor inacessível — trabalhando offline");
-        return {ok:true, offline:true};
-      }
-      return {ok:false, erro:"Servidor inacessível e a senha local não confere."};
-    }
-    if(!ok) return {ok:false, erro:"Usuário ou senha incorretos."};
-    USUARIO=u; OUTRO = u==="luis"?"mayla":"luis";
+  async function abrir(u){
+    USUARIO = u; OUTRO = u==="luis" ? "mayla" : "luis";
     await carregarLocal(); semearSeVazio();
-    marcarSync("on","conectado");
-    sincronizar({silencioso:false});
-    return {ok:true};
+  }
+
+  if(SB.ligado){
+    let ok = false, caiu = false;
+    try{ ok = await sbLogin(u, senha); }
+    catch(e){ caiu = true; }
+
+    if(ok){
+      await abrir(u);
+      marcarSync("on","conectado");
+      sincronizar({silencioso:false});
+      return {ok:true};
+    }
+
+    /* O servidor não autenticou. Pode ser senha errada, servidor fora do ar,
+       ou as contas ainda não terem sido criadas no painel do Supabase. Em
+       vez de deixar o app inutilizável, aceito a senha local e entro em modo
+       offline — sem token não se lê nem se escreve nada no servidor, então
+       o que aparece é só o que já está neste aparelho. */
+    if(await conferirLocal(u, senha)){
+      await abrir(u);
+      marcarSync("erro", caiu ? "servidor inacessível — só este aparelho"
+                              : "sem conta no servidor — só este aparelho");
+      return {ok:true, offline:true,
+              aviso: caiu ? "Servidor fora do ar. Trabalhando só neste aparelho."
+                          : "O servidor não reconheceu esse login, então nada será compartilhado. Crie as contas no Supabase."};
+    }
+    return {ok:false, erro: caiu ? "Servidor inacessível e a senha local não confere."
+                                 : "Usuário ou senha incorretos."};
   }
 
   if(!(await conferirLocal(u, senha))) return {ok:false, erro:"Usuário ou senha incorretos."};
-  USUARIO=u; OUTRO = u==="luis"?"mayla":"luis";
-  await carregarLocal(); semearSeVazio();
+  await abrir(u);
   marcarSync("off","só neste aparelho");
   return {ok:true};
 }

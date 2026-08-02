@@ -32,27 +32,31 @@ icons/                ícones 192, 512 e maskable
 | **Duelo** | Semana / Mês / Geral | Placar de um contra o outro, com a quebra de onde cada ponto veio. |
 | **Ajustes** | — | Conexão com o Supabase, horários, notificações, .ics e backup. |
 
-## Ligar o compartilhamento (Supabase)
+## Compartilhamento (Supabase)
 
-Sem isto o app funciona inteiro, só que sozinho: cada aparelho fica com os próprios dados
-e nada é compartilhado. Para os dois se enxergarem:
+O projeto já está ligado. A URL e a chave *publicável* estão em `SB_PADRAO`, no topo de
+`js/dados.js`, e o schema de `supabase.sql` já foi aplicado — tabela criada, RLS ligado,
+três policies no lugar. Nenhum aparelho precisa configurar nada.
 
-1. Crie uma conta em [supabase.com](https://supabase.com) e um projeto novo (plano gratuito serve).
-2. **SQL Editor** → cole o conteúdo de `supabase.sql` → **Run**.
-3. **Authentication → Users → Add user**, duas vezes, marcando *Auto Confirm User*:
-   - `luis@agenda.app`
-   - `mayla@agenda.app`
+**Falta só criar as duas contas**, em Authentication → Users → Add user, marcando
+*Auto Confirm User*:
 
-   A senha definida aqui é a que passa a valer no app. Como agora ela é conferida no
-   servidor, use algo melhor que `123456`.
-4. **Project Settings → API**, copie *Project URL* e a chave *anon / publishable*.
-5. No app: **Ajustes → Sincronização**, cole os dois valores, **Salvar e conectar**,
-   depois **Sair** e entrar de novo. O ponto ao lado de "Conectado" fica verde.
-6. Repita o passo 5 no outro celular.
+- `luis@agenda.app`
+- `mayla@agenda.app`
 
-A chave *anon* fica visível no navegador — é assim mesmo, ela é feita para isso. Quem
-protege os dados é o Row Level Security do `supabase.sql`: sem login não se lê nada, e
-cada conta só escreve no que é dela. **Nunca** cole aqui a chave `service_role`.
+Os endereços têm que ser exatamente esses: o RLS descobre o dono de cada registro pelo
+que vem antes do `@`, e a tabela só aceita `luis` ou `mayla`.
+
+Escolha senhas **fortes**. Antes elas eram teatro; agora são a única coisa entre a
+internet e os seus dados, porque a chave publicável está à vista no código. Enquanto as
+contas não existirem, o app entra em modo local e avisa na tela.
+
+A chave publicável ficar exposta é o desenho normal do Supabase: sozinha ela não lê nada.
+Verificado neste projeto — sem login, leitura volta vazia e escrita é recusada pelo RLS.
+**Nunca** coloque no código a `service_role` nem a `sb_secret_...`: essas ignoram o RLS.
+
+Para apontar o app a outro projeto, use **Ajustes → Sincronização** — o que for salvo ali
+vence o padrão embutido. "Desconectar" desliga a sincronia e volta ao modo local.
 
 ## Como a sincronia se comporta
 
